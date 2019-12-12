@@ -79,16 +79,18 @@ if __name__ == "__main__":
     metrics = [
         "grid_size",
         "loss",
-        "x",
-        "y",
-        "w",
-        "h",
+        "u",
+        "v",
+        "Z",
+        "Qw",
+        "Qx",
+        "Qy",
+        "Qz",
         "conf",
         "cls",
         "cls_acc",
-        "recall50",
-        "recall75",
-        "precision",
+        "recall5",
+        "recall05",
         "conf_obj",
         "conf_noobj",
     ]
@@ -147,32 +149,32 @@ if __name__ == "__main__":
 
             model.seen += imgs.size(0)
 
-        if epoch % opt.evaluation_interval == 0:
-            print("\n---- Evaluating Model ----")
-            # Evaluate the model on the validation set
-            precision, recall, AP, f1, ap_class = evaluate(
-                model,
-                path=valid_path,
-                iou_thres=0.5,
-                conf_thres=0.5,
-                nms_thres=0.5,
-                img_size=opt.img_size,
-                batch_size=8,
-            )
-            evaluation_metrics = [
-                ("val_precision", precision.mean()),
-                ("val_recall", recall.mean()),
-                ("val_mAP", AP.mean()),
-                ("val_f1", f1.mean()),
-            ]
-            logger.list_of_scalars_summary(evaluation_metrics, epoch)
+        # if epoch % opt.evaluation_interval == 0:
+        #     print("\n---- Evaluating Model ----")
+        #     # Evaluate the model on the validation set
+        #     precision, recall, AP, f1, ap_class = evaluate(
+        #         model,
+        #         path=valid_path,
+        #         iou_thres=0.5,
+        #         conf_thres=0.5,
+        #         nms_thres=0.5,
+        #         img_size=opt.img_size,
+        #         batch_size=8,
+        #     )
+        #     evaluation_metrics = [
+        #         ("val_precision", precision.mean()),
+        #         ("val_recall", recall.mean()),
+        #         ("val_mAP", AP.mean()),
+        #         ("val_f1", f1.mean()),
+        #     ]
+        #     logger.list_of_scalars_summary(evaluation_metrics, epoch)
 
-            # Print class APs and mAP
-            ap_table = [["Index", "Class name", "AP"]]
-            for i, c in enumerate(ap_class):
-                ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
-            print(AsciiTable(ap_table).table)
-            print(f"---- mAP {AP.mean()}")
+        #     # Print class APs and mAP
+        #     ap_table = [["Index", "Class name", "AP"]]
+        #     for i, c in enumerate(ap_class):
+        #         ap_table += [[c, class_names[c], "%.5f" % AP[i]]]
+        #     print(AsciiTable(ap_table).table)
+        #     print(f"---- mAP {AP.mean()}")
 
         if epoch % opt.checkpoint_interval == 0:
             torch.save(model.state_dict(), f"checkpoints/yolov3_ckpt_%d.pth" % epoch)

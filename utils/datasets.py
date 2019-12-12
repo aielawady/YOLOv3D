@@ -57,7 +57,7 @@ class ImageFolder(Dataset):
 
 
 class ListDataset(Dataset):
-    def __init__(self, list_path, img_size=416, augment=True, multiscale=True, normalized_labels=True):
+    def __init__(self, list_path, img_size=416, augment=False, multiscale=True, normalized_labels=True):
         with open(list_path, "r") as file:
             self.img_files = file.readlines()
 
@@ -70,8 +70,8 @@ class ListDataset(Dataset):
         self.augment = augment
         self.multiscale = multiscale
         self.normalized_labels = normalized_labels
-        self.min_size = self.img_size - 3 * 32
-        self.max_size = self.img_size + 3 * 32
+        self.min_size = self.img_size - 2 * 3 * 32
+        self.max_size = self.img_size
         self.batch_count = 0
 
     def __getitem__(self, index):
@@ -104,25 +104,20 @@ class ListDataset(Dataset):
 
         targets = None
         if os.path.exists(label_path):
-            boxes = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 5))
+            uvZQ = torch.from_numpy(np.loadtxt(label_path).reshape(-1, 8))
             # Extract coordinates for unpadded + unscaled image
-            x1 = w_factor * (boxes[:, 1] - boxes[:, 3] / 2)
-            y1 = h_factor * (boxes[:, 2] - boxes[:, 4] / 2)
-            x2 = w_factor * (boxes[:, 1] + boxes[:, 3] / 2)
-            y2 = h_factor * (boxes[:, 2] + boxes[:, 4] / 2)
+            u = w_factor * uvZQ[:, 1]
+            v = h_factor * uvZQ[:, 2]
             # Adjust for added padding
-            x1 += pad[0]
-            y1 += pad[2]
-            x2 += pad[1]
-            y2 += pad[3]
+            u += pad[0]
+            v += pad[2]
             # Returns (x, y, w, h)
-            boxes[:, 1] = ((x1 + x2) / 2) / padded_w
-            boxes[:, 2] = ((y1 + y2) / 2) / padded_h
-            boxes[:, 3] *= w_factor / padded_w
-            boxes[:, 4] *= h_factor / padded_h
+            uvZQ[:, 1] = u / padded_w
+            uvZQ[:, 2] = v / padded_h
 
-            targets = torch.zeros((len(boxes), 6))
-            targets[:, 1:] = boxes
+
+            targets = torch.zeros((len(uvZQ), 9))
+            targets[:, 1:] = uvZQ
 
         # Apply augmentations
         if self.augment:
