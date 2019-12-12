@@ -308,7 +308,7 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
  
     # TODO: find fix for the problem.
     gi[gi>=nG] = nG - 1
-    gi[gj>=nG] = jG - 1
+    gj[gj>=nG] = nG - 1
     # Set masks
     obj_mask[b, best_n, gj, gi] = 1
     noobj_mask[b, best_n, gj, gi] = 0
