@@ -314,8 +314,8 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
     noobj_mask[b, best_n, gj, gi] = 0
 
     # Set noobj mask to zero where iou exceeds ignore threshold
-    for i, anchor_score in enumerate(z_score.t()):
-        noobj_mask[b[i], anchor_score > ignore_thres, gj[i], gi[i]] = 0
+    for i, anchor_Z_score in enumerate(z_score.t()):
+        noobj_mask[b[i], anchor_Z_score < ignore_thres, gj[i], gi[i]] = 0
 
     # Coordinates
     tu[b, best_n, gj, gi] = gu - gu.floor()
@@ -336,4 +336,5 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
     # z_scores[b, best_n, gj, gi] = bbox_iou(pred_boxes[b, best_n, gj, gi], target_boxes, x1y1x2y2=False)
     # z_scores = 0
     tconf = obj_mask.float()
+    
     return z_scores, class_mask, obj_mask, noobj_mask, tu, tv, tZ, tQw, tQx, tQy, tQz, tcls, tconf
