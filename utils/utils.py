@@ -318,8 +318,10 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
         noobj_mask[b[i], anchor_Z_score < ignore_thres, gj[i], gi[i]] = 0
 
     # Coordinates
-    tu[b, best_n, gj, gi] = gu - gu.floor()
-    tv[b, best_n, gj, gi] = gv - gv.floor()
+    tu[b, best_n, gj, gi] = gu - gi.float()
+    tv[b, best_n, gj, gi] = gv - gj.float()
+    tu[tu>1] = 1
+    tv[tv>1] = 1
 
     # Quaternion
     tQw[b, best_n, gj, gi] = gQw
