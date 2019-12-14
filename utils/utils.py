@@ -275,13 +275,13 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
 
     nB = pred_uvZQ.size(0)
     nA = pred_uvZQ.size(1)
-    nC = pred_cls.size(-1)
+    # nC = pred_cls.size(-1)
     nG = pred_uvZQ.size(2)
 
     # Output tensors
     obj_mask = ByteTensor(nB, nA, nG, nG).fill_(0)
     noobj_mask = ByteTensor(nB, nA, nG, nG).fill_(1)
-    class_mask = FloatTensor(nB, nA, nG, nG).fill_(0)
+    # class_mask = FloatTensor(nB, nA, nG, nG).fill_(0)
     z_scores = FloatTensor(nB, nA, nG, nG).fill_(0)
     tu = FloatTensor(nB, nA, nG, nG).fill_(0)
     tv = FloatTensor(nB, nA, nG, nG).fill_(0)
@@ -290,7 +290,7 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
     tQx = FloatTensor(nB, nA, nG, nG).fill_(0)
     tQy = FloatTensor(nB, nA, nG, nG).fill_(0)
     tQz = FloatTensor(nB, nA, nG, nG).fill_(0)
-    tcls = FloatTensor(nB, nA, nG, nG, nC).fill_(0)
+    # tcls = FloatTensor(nB, nA, nG, nG, nC).fill_(0)
 
     # Convert to position relative to box
     guv = target[:, 2:4] * nG
@@ -330,13 +330,13 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
     tQz[b, best_n, gj, gi] = gQz
 
     # One-hot encoding of label
-    tcls[b, best_n, gj, gi, target_labels] = 1
+    # tcls[b, best_n, gj, gi, target_labels] = 1
     
     # Compute label correctness and iou at best anchor
-    class_mask[b, best_n, gj, gi] = (pred_cls[b, best_n, gj, gi].argmax(-1) == target_labels).float()
+    # class_mask[b, best_n, gj, gi] = (pred_cls[b, best_n, gj, gi].argmax(-1) == target_labels).float()
     z_scores[b, best_n, gj, gi] = Z_anchor_score(pred_uvZQ[b, best_n, gj, gi,4], gZ)
     # z_scores[b, best_n, gj, gi] = bbox_iou(pred_boxes[b, best_n, gj, gi], target_boxes, x1y1x2y2=False)
     # z_scores = 0
     tconf = obj_mask.float()
     
-    return z_scores, class_mask, obj_mask, noobj_mask, tu, tv, tZ, tQw, tQx, tQy, tQz, tcls, tconf
+    return z_scores, None, obj_mask, noobj_mask, tu, tv, tZ, tQw, tQx, tQy, tQz, None, tconf

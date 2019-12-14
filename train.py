@@ -87,8 +87,6 @@ if __name__ == "__main__":
         "Qy",
         "Qz",
         "conf",
-        "cls",
-        "cls_acc",
         "recall5",
         "recall05",
         "conf_obj",

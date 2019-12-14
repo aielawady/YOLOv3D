@@ -162,7 +162,7 @@ class YOLOLayer(nn.Module):
         Qz = prediction[..., 6]
 
         pred_conf = torch.sigmoid(prediction[..., 7])  # Conf
-        pred_cls = torch.sigmoid(prediction[..., 8:])  # Cls pred.
+        # pred_cls = torch.sigmoid(prediction[..., 8:])  # Cls pred.
 
         # If grid size does not match current we compute new offsets
         if grid_size != self.grid_size:
@@ -182,8 +182,8 @@ class YOLOLayer(nn.Module):
             (
                 pred_uvZQ[..., :2].view(num_samples, -1, 2) * self.stride,
                 pred_uvZQ[..., 2:].view(num_samples, -1, 5),
-                pred_conf.view(num_samples, -1, 1),
-                pred_cls.view(num_samples, -1, self.num_classes),
+                pred_conf.view(num_samples, -1, 1)
+                # pred_cls.view(num_samples, -1, self.num_classes),
             ),
             -1,
         )
@@ -193,7 +193,7 @@ class YOLOLayer(nn.Module):
         else:
             z_scores, class_mask, obj_mask, noobj_mask, tu, tv, tZ, tQw, tQx, tQy, tQz, tcls, tconf = build_targets(
                 pred_uvZQ=pred_uvZQ,
-                pred_cls=pred_cls,
+                pred_cls=None,
                 target=targets,
                 anchors=self.anchors,
                 ignore_thres=self.ignore_thres,
@@ -210,17 +210,17 @@ class YOLOLayer(nn.Module):
             loss_conf_obj = self.bce_loss(pred_conf[obj_mask], tconf[obj_mask])
             loss_conf_noobj = self.bce_loss(pred_conf[noobj_mask], tconf[noobj_mask])
             loss_conf = self.obj_scale * loss_conf_obj + self.noobj_scale * loss_conf_noobj
-            loss_cls = self.bce_loss(pred_cls[obj_mask], tcls[obj_mask])
-            total_loss = loss_u + loss_v + loss_Z + loss_Qw + loss_Qx + loss_Qy + loss_Qz + loss_conf + loss_cls
+            # loss_cls = self.bce_loss(pred_cls[obj_mask], tcls[obj_mask])
+            total_loss = loss_u + loss_v + loss_Z + loss_Qw + loss_Qx + loss_Qy + loss_Qz + loss_conf # + loss_cls
 
             # Metrics
-            cls_acc = 100 * class_mask[obj_mask].mean()
+            # cls_acc = 100 * class_mask[obj_mask].mean()
             conf_obj = pred_conf[obj_mask].mean()
             conf_noobj = pred_conf[noobj_mask].mean()
             conf50 = (pred_conf > 0.5).float()
             z5 = (z_scores < 0.5).float()
             z05 = (z_scores < 0.05).float()
-            detected_mask = conf50 * class_mask * tconf
+            detected_mask = conf50 * tconf # * class_mask
             recall5 = torch.sum(z5 * detected_mask) / (obj_mask.sum() + 1e-16)
             recall05 = torch.sum(z05 * detected_mask) / (obj_mask.sum() + 1e-16)
 
@@ -235,8 +235,8 @@ class YOLOLayer(nn.Module):
                 "Qy": to_cpu(loss_Qy).item(),
                 "Qz": to_cpu(loss_Qz).item(),
                 "conf": to_cpu(loss_conf).item(),
-                "cls": to_cpu(loss_cls).item(),
-                "cls_acc": to_cpu(cls_acc).item(),
+                # "cls": to_cpu(loss_cls).item(),
+                # "cls_acc": to_cpu(cls_acc).item(),
                 "recall5": to_cpu(recall5).item(),
                 "recall05": to_cpu(recall05).item(),
                 "conf_obj": to_cpu(conf_obj).item(),
