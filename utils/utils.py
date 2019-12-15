@@ -9,7 +9,9 @@ from torch.autograd import Variable
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-
+from sklearn.cluster import DBSCAN
+from sklearn.cluster import MeanShift, estimate_bandwidth
+from sklearn.cluster import AgglomerativeClustering
 
 def to_cpu(tensor):
     return tensor.detach().cpu()
@@ -49,15 +51,47 @@ def rescale_boxes(boxes, current_dim, original_shape):
     boxes[:, 3] = ((boxes[:, 3] - pad_y // 2) / unpad_h) * orig_h
     return boxes
 
+def rescale_centers(boxes, current_dim, original_shape):
+    """ Rescales bounding boxes to the original shape """
+    orig_h, orig_w = original_shape
+    # The amount of padding that was added
+    pad_x = max(orig_h - orig_w, 0) * (current_dim / max(original_shape))
+    pad_y = max(orig_w - orig_h, 0) * (current_dim / max(original_shape))
+    # Image height and width after padding is removed
+    unpad_h = current_dim - pad_y
+    unpad_w = current_dim - pad_x
+    # Rescale bounding boxes to dimension of original image
+    boxes[:, 0] = ((boxes[:, 0] - pad_x // 2) / unpad_w) * orig_w
+    boxes[:, 1] = ((boxes[:, 1] - pad_y // 2) / unpad_h) * orig_h
+    return boxes
 
-def xywh2xyxy(x):
+# def xywh2xyxy(x):
+#     y = x.new(x.shape)
+#     y[..., 0] = x[..., 0] - x[..., 2] / 2
+#     y[..., 1] = x[..., 1] - x[..., 3] / 2
+#     y[..., 2] = x[..., 0] + x[..., 2] / 2
+#     y[..., 3] = x[..., 1] + x[..., 3] / 2
+#     return y
+
+def uvZ2XYZ(x):
+    fx = 2304.5479
+    fy = 2305.8757
+    cx = 1686.2379
+    cy = 1354.9849
+
+    cam = [
+           [fx,  0, cx],
+           [ 0, fy, cy],
+           [ 0,  0,  1]
+    ]
     y = x.new(x.shape)
-    y[..., 0] = x[..., 0] - x[..., 2] / 2
-    y[..., 1] = x[..., 1] - x[..., 3] / 2
-    y[..., 2] = x[..., 0] + x[..., 2] / 2
-    y[..., 3] = x[..., 1] + x[..., 3] / 2
+    tmp = x[...,:3]
+    tmp[...,2] = 1
+    y[...,:3] = torch.matmul(torch.tensor(np.linalg.inv(cam)).float(), tmp.t()).T*x[...,2:3]
+    assert(torch.max(torch.abs(y[...,2] - x[...,2])).item() < 0.0001)
+    y[...,:3] *= 100
+    # y[...,2] = x[...,2]
     return y
-
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
     """ Compute the average precision, given the recall and precision curves.
@@ -267,6 +301,74 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
 
     return output
 
+
+def pred2cars(prediction, conf_thres=0.5, cluster_thresh=0.4, min_samples=2):
+    """
+    Removes detections with lower object confidence score than 'conf_thres' and performs
+    Non-Maximum Suppression to further filter detections.
+    Returns detections with shape:
+        (x1, y1, x2, y2, object_conf, class_score, class_pred)
+    """
+    # print(prediction[:, :, 2])
+
+    # From (center x, center y, width, height) to (x1, y1, x2, y2)
+    # prediction[..., :4] = xywh2xyxy(prediction[..., :4])
+    output = [None for _ in range(len(prediction))]
+    for image_i, image_pred in enumerate(prediction):
+        # Filter out confidence scores below threshold
+        image_pred = image_pred[image_pred[:, 7] >= conf_thres]
+
+        # If none are remaining => process next image
+        if not image_pred.size(0):
+            continue
+        # Object confidence times class confidence
+        score = image_pred[:, 7:8]
+        # Sort by it
+        # image_pred = image_pred[(-score).argsort()]
+        # class_confs, class_preds = image_pred[:, 5:].max(1, keepdim=True)
+        # detections = torch.cat((image_pred[:, :5], class_confs.float(), class_preds.float()), 1)
+        detections = image_pred[:, :8]
+        # print(detections)
+        # Perform non-maximum suppression
+        # detections[:, :3] = uvZ2XYZ(detections[:, :3])
+        clf = 0
+        if clf == 0:
+            db = DBSCAN(eps=cluster_thresh, min_samples=min_samples).fit(uvZ2XYZ(detections[:, :3]))
+            labels = db.labels_
+        elif clf == 1:
+            bandwidth = estimate_bandwidth(uvZ2XYZ(detections[:, :3]), quantile=0.5)
+            ms = MeanShift(bandwidth=bandwidth, bin_seeding=True)
+            ms.fit(uvZ2XYZ(detections[:, :3]))
+            labels = ms.labels_
+        elif clf == 2:
+            clustering = AgglomerativeClustering(linkage='ward', n_clusters=None, distance_threshold=0.02)
+            # t0 = time()
+            clustering.fit(uvZ2XYZ(detections[:, :3]))
+            labels = clustering.labels_
+        else:
+            labels = np.arange(len(detections))
+        print(len(np.unique(labels)))
+        keep_boxes = []
+        for i, label in enumerate(np.unique(labels)):
+            if label == -1: continue
+            masker = labels == label
+            detections[masker, :7] = (score[masker] * detections[masker, :7]).sum(0) / score[masker].sum()
+            keep_boxes += [detections[masker, :][0]]
+            # detections = detections[:, ~masker, :]
+        # while detections.size(0):
+        #     large_overlap = bbox_iou(detections[0, :4].unsqueeze(0), detections[:, :4]) > nms_thres
+        #     label_match = detections[0, -1] == detections[:, -1]
+        #     # Indices of boxes with lower confidence scores, large IOUs and matching labels
+        #     invalid = large_overlap & label_match
+        #     weights = detections[invalid, 4:5]
+        #     # Merge overlapping bboxes by order of confidence
+        #     detections[0, :4] = (weights * detections[invalid, :4]).sum(0) / weights.sum()
+        #     keep_boxes += [detections[0]]
+        #     detections = detections[~invalid]
+        if keep_boxes:
+            output[image_i] = torch.stack(keep_boxes)
+
+    return output
 
 def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
 

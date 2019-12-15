@@ -48,7 +48,7 @@ if __name__ == "__main__":
         model.load_darknet_weights(opt.weights_path)
     else:
         # Load checkpoint weights
-        model.load_state_dict(torch.load(opt.weights_path))
+        model.load_state_dict(torch.load(opt.weights_path, map_location=torch.device('cpu')))
 
     model.eval()  # Set in evaluation mode
 
@@ -75,8 +75,7 @@ if __name__ == "__main__":
         # Get detections
         with torch.no_grad():
             detections = model(input_imgs)
-            detections = non_max_suppression(detections, opt.conf_thres, opt.nms_thres)
-
+            detections = pred2cars(detections, opt.conf_thres, 0.5, 1)
         # Log progress
         current_time = time.time()
         inference_time = datetime.timedelta(seconds=current_time - prev_time)
@@ -89,7 +88,7 @@ if __name__ == "__main__":
 
     # Bounding-box colors
     cmap = plt.get_cmap("tab20b")
-    colors = [cmap(i) for i in np.linspace(0, 1, 20)]
+    colors = [cmap(i) for i in np.linspace(0, 1, 50)]
 
     print("\nSaving images:")
     # Iterate through images and save plot of detections
@@ -106,31 +105,34 @@ if __name__ == "__main__":
         # Draw bounding boxes and labels of detections
         if detections is not None:
             # Rescale boxes to original image
-            detections = rescale_boxes(detections, opt.img_size, img.shape[:2])
-            unique_labels = detections[:, -1].cpu().unique()
-            n_cls_preds = len(unique_labels)
-            bbox_colors = random.sample(colors, n_cls_preds)
-            for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections:
+            # print(detections)
+            detections = rescale_centers(detections, opt.img_size, img.shape[:2])
+            # print(detections)
+            # unique_labels = detections[:, -1].cpu().unique()
+            # n_cls_preds = len(unique_labels)
+            bbox_colors = random.sample(colors, detections.size(0))
+            for car_num, (u, v, Z, Qw, Qx, Qy, Qz, confidence) in enumerate(detections):
 
-                print("\t+ Label: %s, Conf: %.5f" % (classes[int(cls_pred)], cls_conf.item()))
+                print("\t+ Car: %s, Conf: %.5f" % (int(car_num), confidence.item()))
 
-                box_w = x2 - x1
-                box_h = y2 - y1
+                # box_w = x2 - x1
+                # box_h = y2 - y1
 
-                color = bbox_colors[int(np.where(unique_labels == int(cls_pred))[0])]
+                color = bbox_colors[int(car_num)]
                 # Create a Rectangle patch
-                bbox = patches.Rectangle((x1, y1), box_w, box_h, linewidth=2, edgecolor=color, facecolor="none")
+                # bbox = patches.Rectangle((x1, y1), box_w, box_h, linewidth=2, edgecolor=color, facecolor="none")
+                center = patches.Circle((u, v), 5, linewidth=1, edgecolor=color, facecolor="none")
                 # Add the bbox to the plot
-                ax.add_patch(bbox)
+                ax.add_patch(center)
                 # Add label
-                plt.text(
-                    x1,
-                    y1,
-                    s=classes[int(cls_pred)],
-                    color="white",
-                    verticalalignment="top",
-                    bbox={"color": color, "pad": 0},
-                )
+                # plt.text(
+                #     x1,
+                #     y1,
+                #     s=classes[int(cls_pred)],
+                #     color="white",
+                #     verticalalignment="top",
+                #     bbox={"color": color, "pad": 0},
+                # )
 
         # Save generated image with detections
         plt.axis("off")

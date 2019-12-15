@@ -38,8 +38,8 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
         # Extract labels
         labels += targets[:, 1].tolist()
         # Rescale target
-        targets[:, 2:] = xywh2xyxy(targets[:, 2:])
-        targets[:, 2:] *= img_size
+        targets[:, 2:] = uvZ2XYZ(targets[:, 2:])
+        # targets[:, 2:] *= img_size
 
         imgs = Variable(imgs.type(Tensor), requires_grad=False)
 
