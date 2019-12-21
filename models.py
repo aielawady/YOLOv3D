@@ -156,10 +156,10 @@ class YOLOLayer(nn.Module):
         # Z in the 3D coordinates
         Z = prediction[..., 2]
         # (Qw + Qx * i + Qy * j + Qz * k) Quaternion
-        Qw = prediction[..., 3]
-        Qx = prediction[..., 4]
-        Qy = prediction[..., 5]
-        Qz = prediction[..., 6]
+        Qw = torch.sigmoid(prediction[..., 3])
+        Qx = torch.tanh(prediction[..., 4])
+        Qy = torch.tanh(prediction[..., 5])
+        Qz = torch.tanh(prediction[..., 6])
 
         pred_conf = torch.sigmoid(prediction[..., 7])  # Conf
         # pred_cls = torch.sigmoid(prediction[..., 8:])  # Cls pred.
@@ -173,10 +173,10 @@ class YOLOLayer(nn.Module):
         pred_uvZQ[..., 0] = u.data + self.grid_x
         pred_uvZQ[..., 1] = v.data + self.grid_y
         pred_uvZQ[..., 2] = Z.data
-        pred_uvZQ[..., 3] = torch.sigmoid(Qw.data)  # * self.anchor_Qw
-        pred_uvZQ[..., 4] = torch.tanh(Qx.data)     # * self.anchor_Qx
-        pred_uvZQ[..., 5] = torch.tanh(Qy.data)     # * self.anchor_Qy
-        pred_uvZQ[..., 6] = torch.tanh(Qz.data)     # * self.anchor_Qz
+        pred_uvZQ[..., 3] = Qw.data     # * self.anchor_Qw
+        pred_uvZQ[..., 4] = Qx.data     # * self.anchor_Qx
+        pred_uvZQ[..., 5] = Qy.data     # * self.anchor_Qy
+        pred_uvZQ[..., 6] = Qz.data     # * self.anchor_Qz
 
         output = torch.cat(
             (

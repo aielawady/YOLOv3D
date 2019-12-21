@@ -12,6 +12,7 @@ import matplotlib.patches as patches
 from sklearn.cluster import DBSCAN
 from sklearn.cluster import MeanShift, estimate_bandwidth
 from sklearn.cluster import AgglomerativeClustering
+from math import cos, sin, atan2, asin
 
 def to_cpu(tensor):
     return tensor.detach().cpu()
@@ -73,7 +74,7 @@ def rescale_centers(boxes, current_dim, original_shape):
 #     y[..., 3] = x[..., 1] + x[..., 3] / 2
 #     return y
 
-def uvZ2XYZ(x):
+def uvZ2XYZ(x, img_size):
     fx = 2304.5479
     fy = 2305.8757
     cx = 1686.2379
@@ -84,14 +85,44 @@ def uvZ2XYZ(x):
            [ 0, fy, cy],
            [ 0,  0,  1]
     ]
-    y = x.new(x.shape)
-    tmp = x[...,:3]
+    y = x.clone()
+    tmp = x[...,:3]/img_size
+    # tmp[...,2] = x[...,2]
+    tmp[...,0] = tmp[...,0]*3384
+    tmp[...,1] = tmp[...,1]*2710
+    # tmp = x[...,:3]/img_size
     tmp[...,2] = 1
-    y[...,:3] = torch.matmul(torch.tensor(np.linalg.inv(cam)).float(), tmp.t()).T*x[...,2:3]
-    assert(torch.max(torch.abs(y[...,2] - x[...,2])).item() < 0.0001)
-    y[...,:3] *= 100
+    y[...,:3] = torch.matmul(torch.tensor(np.linalg.inv(cam)).float(), tmp.t()).T*x[...,2:3]*100
+    # assert(torch.max(torch.abs(y[...,2] - x[...,2])).item() < 0.0001)
+    # y[...,:3] *= 100
+    # y[...,2] = x[..., 2]*100
     # y[...,2] = x[...,2]
+    # print('y')
+    # print(y)
+    # print('x')
+    # print(x)
     return y
+
+def ToEulerAngles(w, x, y, z):
+
+    # roll (x-axis rotation)
+    sinr_cosp = 2 * (w * x + y * z);
+    cosr_cosp = 1 - 2 * (x * x + y * y);
+    roll = atan2(sinr_cosp, cosr_cosp)
+
+    # pitch (y-axis rotation)
+    sinp = 2 * (w * y - z * x);
+    if abs(sinp) >= 1:
+        pitch = sinp/abs(sinp) * np.pi / 2 # use 90 degrees if out of range
+    else:
+        pitch = asin(sinp)
+
+    # yaw (z-axis rotation)
+    siny_cosp = 2 * (w * z + x * y);
+    cosy_cosp = 1 - 2 * (y * y + z * z);
+    yaw = atan2(siny_cosp, cosy_cosp);
+
+    return torch.tensor([pitch, yaw, roll])
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
     """ Compute the average precision, given the recall and precision curves.
@@ -302,7 +333,7 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
     return output
 
 
-def pred2cars(prediction, conf_thres=0.5, cluster_thresh=0.4, min_samples=2):
+def pred2cars(prediction, conf_thres=0.5, cluster_thresh=0.4, min_samples=2, final=False, image_size=416):
     """
     Removes detections with lower object confidence score than 'conf_thres' and performs
     Non-Maximum Suppression to further filter detections.
@@ -333,7 +364,7 @@ def pred2cars(prediction, conf_thres=0.5, cluster_thresh=0.4, min_samples=2):
         # detections[:, :3] = uvZ2XYZ(detections[:, :3])
         clf = 0
         if clf == 0:
-            db = DBSCAN(eps=cluster_thresh, min_samples=min_samples).fit(uvZ2XYZ(detections[:, :3]))
+            db = DBSCAN(eps=cluster_thresh, min_samples=min_samples).fit(uvZ2XYZ(detections[:, :3], 1 if not image_size else image_size))
             labels = db.labels_
         elif clf == 1:
             bandwidth = estimate_bandwidth(uvZ2XYZ(detections[:, :3]), quantile=0.5)
@@ -353,7 +384,25 @@ def pred2cars(prediction, conf_thres=0.5, cluster_thresh=0.4, min_samples=2):
             if label == -1: continue
             masker = labels == label
             detections[masker, :7] = (score[masker] * detections[masker, :7]).sum(0) / score[masker].sum()
-            keep_boxes += [detections[masker, :][0]]
+            if final:
+                # print('hereeeeeee')
+                # print(detections[0])
+                detection = uvZ2XYZ(detections[masker, :][0], 1 if not image_size else image_size)
+                detection[3:6] = ToEulerAngles(*detection[3:7])
+                detection[6] = detection[7]
+                xyz = detection[:3].clone()
+                ypr = detection[3:6].clone()
+                confidence = detection[6]
+                detection[:3] = ypr
+                detection[3:6] = xyz
+
+                detection[6] = confidence
+                # print(detection)
+                # print('hereeeeeee_end')
+                keep_boxes += [detection[:7]]
+            else:
+                keep_boxes += [detections[masker, :][0]]
+
             # detections = detections[:, ~masker, :]
         # while detections.size(0):
         #     large_overlap = bbox_iou(detections[0, :4].unsqueeze(0), detections[:, :4]) > nms_thres
@@ -424,6 +473,7 @@ def build_targets(pred_uvZQ, pred_cls, target, anchors, ignore_thres):
     tv[b, best_n, gj, gi] = gv - gj.float()
     tu[tu>1] = 1
     tv[tv>1] = 1
+    tZ[b, best_n, gj, gi] = gZ
 
     # Quaternion
     tQw[b, best_n, gj, gi] = gQw

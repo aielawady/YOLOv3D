@@ -45,7 +45,8 @@ def evaluate(model, path, iou_thres, conf_thres, nms_thres, img_size, batch_size
 
         with torch.no_grad():
             outputs = model(imgs)
-            outputs = non_max_suppression(outputs, conf_thres=conf_thres, nms_thres=nms_thres)
+            outputs = pred2cars(outputs, opt.conf_thres, opt.eps, opt.min_sample, final=True)
+            # outputs = non_max_suppression(outputs, conf_thres=conf_thres, nms_thres=nms_thres)
 
         sample_metrics += get_batch_statistics(outputs, targets, iou_threshold=iou_thres)
 
